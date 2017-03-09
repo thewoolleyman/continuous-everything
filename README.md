@@ -14,4 +14,9 @@ The starting point for automation of test/build/delivery pipelines.
 
 ### Buildkite Manual Steps
 
-* TODO
+* Get an account on https://buildkite.com
+* Create an Org
+* Create an Agent, select "AWS" type, and follow their instructions to set up
+  the [Elastic CI Stack for AWS](https://github.com/buildkite/elastic-ci-stack-for-aws)
+  * Take their suggestions to "Follow best practice by setting up a separate development AWS account and using
+    role switching and consolidated billing"
