@@ -1,0 +1,48 @@
+#cloud-config
+---
+coreos:
+  units:
+  - name: nameservers.network
+    content: |
+      [Network]
+      DNS=8.8.4.4
+      DNS=8.8.8.8
+  - name: swapon.service
+    command: start
+    enable: true
+    content: |
+      [Unit]
+      Description=Turn on swap
+
+      [Service]
+      Type=oneshot
+      ExecStart=/sbin/swapon /dev/xvda9
+
+      [Install]
+      WantedBy=local.target
+  - name: docker-tcp.socket
+    command: start
+    enable: true
+    content: |
+      [Unit]
+      Description=Docker Socket for the API
+
+      [Socket]
+      ListenStream=2375
+      BindIPv6Only=both
+      Service=docker.service
+
+      [Install]
+      WantedBy=sockets.target
+  - name: docker.service
+    command: start
+    drop-ins:
+      - name: 50-insecure-registry.conf
+        content: |
+          [Unit]
+          [Service]
+          Environment=DOCKER_OPTS='--insecure-registry="0.0.0.0/0"'
+ssh_authorized_keys:
+  - ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAIEA0jlUfNVj7cEze217ugH6aZyywww/LoolWG7GmKeXMYK8ZNx8ke9M/PfWaGAJI3GsusGeWNFd650tU9GHjP7pTyLiD72/792Cu0wQF9SmUAZDoERjVFap84xc6WFSsHy/MMTOgwumHoh3RueGENP1HtnVxZuN7hWgFsZeB3+86QM= woolley@home
+
+hostname: illumin8.us
