@@ -18,8 +18,11 @@ The starting point for automation of test/build/delivery pipelines.
 * Create an Org
 * Create an Agent, select "AWS" type, and follow their instructions to set up
   the [Elastic CI Stack for AWS](https://github.com/buildkite/elastic-ci-stack-for-aws)
-  * Take their suggestions to "Follow best practice by setting up a separate development AWS account and using
-    role switching and consolidated billing"
+  * Consider taking their suggestions to "Follow best practice by setting up a separate development AWS account and using
+    role switching and consolidated billing".  For now, I just made a 'buildkite' IAM user and group with full
+    Administrator access
+* Create buckets for secrets and artifacts, specify in CloudFormation form
+* Tweak CloudWatch rules to scale down after 5 minutes instead of 30 
 
 ## Docker Host
 
