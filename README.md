@@ -53,6 +53,7 @@ Hosted at https://rimuhosting.com/
 
 * Install Rimu Ubuntu 16.04 LTS 64-bit VPS
 * `ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no root@72.249.37.36`
+* 
 
 ## Install Rancher Manual Steps
 
