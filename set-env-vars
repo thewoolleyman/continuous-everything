@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# Temporary, hardcoded.  TODO: make programatic
+export AMI_ID=ami-2a38b14a
+export SUBNET_ID=subnet-feff4eb7
+export SG_ID=sg-50cddb28
+export HOSTED_ZONE_NAME=illumin8.us
+export HOSTED_ZONE_ID=Z2WYTNUPD8MNNW
+export VOL_ID=vol-0c4e135dfc61d3656
+export VPC_ID=vpc-567e3831
