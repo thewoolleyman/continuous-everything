@@ -84,7 +84,7 @@ The starting point for automation of test/build/delivery pipelines.
 * Create and Name RancherOS server instance:
   * RancherOS AMI for us-west-2 (Oregon) region: https://github.com/rancher/os/blob/master/README.md
   * `aws ec2 run-instances --region us-west-2 --image-id $AMI_ID --count 1 --instance-type t2.micro --subnet-id $SUBNET_ID --security-group-ids $SG_ID --key-name rancher`
-  * `aws ec2 create-tags --resource $I_ID --tags Key=Name,Value=rancher`    
+  * `aws ec2 create-tags --resource $I_ID --tags Key=Name,Value=rancher-server`
 * Attach MYSQL EBS volume:
   * `aws ec2 attach-volume --volume-id $VOL_ID --instance-id $I_ID --device /dev/xvdm`
 * Assign DNS A record to instance's public IP:
@@ -102,13 +102,29 @@ The starting point for automation of test/build/delivery pipelines.
 * Initial Config
   * Log in via initial unauthenticated access: http://rancher.$HOSTED_ZONE_NAME:8080/
   * Set up github access control under "ADMIN" menu, follow instructions
-* Shutting down
-  * docker ps
-  * docker stop $CONTAINER_ID
 
 ### Spotinst setup
 * https://console.spotinst.com/#/wizard/aws
+* follow instructions - put in appropriate values
+* On "compute" tab, enter following user data cloud-config for rancherOS host instances - replace host and token:
 
+```
+#cloud-config
+write_files:
+  - path: /etc/rc.local
+    permissions: "0755"
+    owner: root
+    content: |
+      #!/bin/bash
+      for i in {1..20}
+      do
+      docker info && break
+      sleep 1
+      done
+      #Starting the Rancher Agent
+      # Setting a CATTLE_HOST_LABELS of "spotinst.instanceId" which is REQUIRED for the Spotinst integration to work.
+      sudo docker run -d -e CATTLE_HOST_LABELS="spotinst.instanceId=`wget -qO- http://169.254.169.254/latest/meta-data/instance-id`" --privileged -v /var/run/docker.sock:/var/run/docker.sock rancher/agent:v0.8.2 http://rancher.$HOSTED_ZONE_NAME:8080/v1/scripts/$TOKEN_FROM_RANCHER_START_HOST_SCREEN
+```
 
 ## Various Gotchas
 
