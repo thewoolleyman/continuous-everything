@@ -41,7 +41,7 @@ The starting point for automation of test/build/delivery pipelines.
 * Set up AWS CLI locally: `brew install awscli`
 * `aws configure`
 * Create Keypair:
-  * `aws ec2 create-key-pair --region us-west-2 --key-name rancher` - save in lastpass
+  * `aws ec2 create-key-pair --region $REGION --key-name rancher` - save in lastpass
   * Copy private key locally to `~/.ssh/rancher.pem` with permissions 600
 * Create and tag VPC:
   * `aws ec2 create-vpc --cidr-block '10.0.0.0/16'`
@@ -51,7 +51,7 @@ The starting point for automation of test/build/delivery pipelines.
   * `aws ec2 create-tags --resource $ACL_ID --tags Key=Name,Value=rancher`
 * Create and Name Security Group:
   * `aws ec2 create-security-group --group-name rancher --description rancher --vpc-id=vpc-567e3831`
-  * `aws ec2 create-tags --resource sg-50cddb28 --tags Key=Name,Value=rancher`
+  * `aws ec2 create-tags --resource $SG_ID --tags Key=Name,Value=rancher`
 * Create, Attach, and Name Internet Gateway:
   * `aws ec2 create-internet-gateway`
   * `aws ec2 attach-internet-gateway --internet-gateway-id $IGW_ID --vpc-id $VPC_ID`
@@ -61,13 +61,16 @@ The starting point for automation of test/build/delivery pipelines.
   * `aws ec2 create-tags --resource $RTB_ID --tags Key=Name,Value=rancher`
 * Add route for Internet Gateway
   * `aws ec2 create-route --route-table-id $RTB_ID --destination-cidr-block 0.0.0.0/0 --gateway-id $IGW_ID`
-* Create, Associate, and Name Subnet:
-  * `aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block '10.0.1.0/24' --availability-zone us-west-2a`
-  * `aws ec2 associate-route-table --subnet-id $SUBNET_ID --route-table-id $RTB_ID`
-  * `aws ec2 modify-subnet-attribute --map-public-ip-on-launch --subnet-id $SUBNET_ID`
-  * `aws ec2 create-tags --resource $SUBNET_ID --tags Key=Name,Value=rancher`
+* Create, Associate, and Name Subnets:
+  * For each $AVAILABILITY_ZONE (a,b,c) and $CIDR_OCTET (101,102,103) with var SUBNET_ID_N (where N = 1,2,3)
+    * Note: Only SUBNET_ID_1 is used for rancher server, other subnets are for use by SpotInst to
+      create workers in different AZs.
+    * `aws ec2 create-subnet --vpc-id $VPC_ID --cidr-block "10.0.$CIDR_OCTET.0/24" --availability-zone $REGION$AVAILABILITY_ZONE`
+    * `aws ec2 associate-route-table --subnet-id $SUBNET_ID_N --route-table-id $RTB_ID`
+    * `aws ec2 modify-subnet-attribute --map-public-ip-on-launch --subnet-id $SUBNET_ID_N`
+    * `aws ec2 create-tags --resource $SUBNET_ID_N --tags Key=Name,Value=rancher-$AVAILABILITY_ZONE`
 * Create and Name EBS Volume to hold persistent Rancher Mysql DB data
-  * `aws ec2 create-volume --volume-type gp2 --size 2 --availability-zone us-west-2a`
+  * `aws ec2 create-volume --volume-type gp2 --size 2 --availability-zone $REGION$AVAILABILITY_ZONE`
   * `aws ec2 create-tags --resource $VOL_ID --tags Key=Name,Value=rancher`
   * Create a standard ubuntu instance to ssh to and mount/format the volume:
     * `sudo mkfs -t ext4 /dev/xvdm`
@@ -82,8 +85,8 @@ The starting point for automation of test/build/delivery pipelines.
 * Set env vars from one-time setup:
   * `source ./set-env-vars`
 * Create and Name RancherOS server instance:
-  * RancherOS AMI for us-west-2 (Oregon) region: https://github.com/rancher/os/blob/master/README.md
-  * `aws ec2 run-instances --region us-west-2 --image-id $AMI_ID --count 1 --instance-type t2.micro --subnet-id $SUBNET_ID --security-group-ids $SG_ID --key-name rancher`
+  * RancherOS AMI for $REGION region: https://github.com/rancher/os/blob/master/README.md
+  * `aws ec2 run-instances --region $REGION --image-id $AMI_ID --count 1 --instance-type t2.micro --subnet-id $SUBNET_ID_1 --security-group-ids $SG_ID --key-name rancher`
   * `aws ec2 create-tags --resource $I_ID --tags Key=Name,Value=rancher-server`
 * Attach MYSQL EBS volume:
   * `aws ec2 attach-volume --volume-id $VOL_ID --instance-id $I_ID --device /dev/xvdm`
@@ -103,7 +106,7 @@ The starting point for automation of test/build/delivery pipelines.
   * Log in via initial unauthenticated access: http://rancher.$HOSTED_ZONE_NAME:8080/
   * Set up github access control under "ADMIN" menu, follow instructions
 
-### Spotinst setup
+### Spotinst one-time setup
 * https://console.spotinst.com/#/wizard/aws
 * follow instructions - put in appropriate values
 * On "compute" tab, enter following user data cloud-config for rancherOS host instances - replace host and token:
