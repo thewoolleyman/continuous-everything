@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-
-set -e
-
-apt-cache remove -y apache2
-apt-get install -y docker
-
