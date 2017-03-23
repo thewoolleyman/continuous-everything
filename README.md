@@ -31,7 +31,7 @@ The starting point for automation of test/build/delivery pipelines.
   * scale down after 5 minutes instead of 30
   * scale up after 3 minutes instead of 1
 
-## Rancher + Spotinst on AWS
+## Rancher + Spotinst on AWS Initial Setup
 
 * Set up Rancher on AWS: https://docs.rancher.com/os/running-rancheros/cloud/aws/
 
@@ -128,6 +128,48 @@ write_files:
       # Setting a CATTLE_HOST_LABELS of "spotinst.instanceId" which is REQUIRED for the Spotinst integration to work.
       sudo docker run -d -e CATTLE_HOST_LABELS="spotinst.instanceId=`wget -qO- http://169.254.169.254/latest/meta-data/instance-id`" --privileged -v /var/run/docker.sock:/var/run/docker.sock rancher/agent:v0.8.2 http://rancher.$HOSTED_ZONE_NAME:8080/v1/scripts/$TOKEN_FROM_RANCHER_START_HOST_SCREEN
 ```
+
+## BuildKite Example Continuous Delivery Pipeline Example
+
+### Manually create example docker image
+
+* Docker notes
+  * https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/#workdir
+  * http://www.carlboettiger.info/2014/08/29/docker-notes.html
+* Create repo and Dockerfile
+  * https://github.com/thewoolleyman/docker-webserver-example
+* Test locally
+  * `docker build -t docker-webserver-example .`
+  * `docker run -d -p 80:80 --name docker-webserver-example -d docker-webserver-example`
+  * Verify on http://localhost
+  * `docker ps -a`
+  * `docker rm -f docker-webserver-example`
+* Commit and push to git repo
+* Push image to dockerhub
+  * https://docs.docker.com/engine/getstarted/step_six/
+  * build and run image as described above
+  * `docker images` - export DOCKER_IMAGE_ID
+  * `export DOCKER_IMAGE_NAME=docker-webserver-example`
+  * `export DOCKER_TAG="$(docker inspect -f '{{ .Created }}' $IMAGE_ID | sed -e 's/[:-]//g' | cut -d '.' -f 1)-$(git log -1 --pretty=format:"%h")"`
+  * `export DOCKER_NAMESPACE=thewoolleyman`
+  * `docker tag $DOCKER_IMAGE_ID $DOCKER_NAMESPACE/$DOCKER_IMAGE_NAME:$DOCKER_TAG`
+  * `docker images` to verify
+  * `docker push $DOCKER_NAMESPACE/$DOCKER_IMAGE_NAME`
+
+### Manually run on Rancher
+
+* Go to rancher UI
+* Containers -> Add
+  * Name
+  * Image (include tag)
+  * Port map: 80:80
+  * Create
+
+### Create pipeline manual steps
+
+* Log into buildkite.com, create pipeline
+
+----
 
 ## Various Gotchas
 
