@@ -156,14 +156,18 @@ write_files:
   * `docker images` to verify
   * `docker push $DOCKER_NAMESPACE/$DOCKER_IMAGE_NAME`
 
-### Manually run on Rancher
+### Add a stack and service
 
-* Go to rancher UI
-* Containers -> Add
+* Rancher UI - Stacks - Add Stack
+* 'ExampleStack'
+* Add Service
   * Name
-  * Image (include tag)
+  * Image (include tag, e.g.: `thewoolleyman/docker-webserver-example:20170323T035310-4d57408`)
   * Port map: 80:80
   * Create
+* After started, click "i" for info, navigate to public IP and verify it serves the example html.  
+
+### Add Route53
 
 ### Create pipeline manual steps
 
