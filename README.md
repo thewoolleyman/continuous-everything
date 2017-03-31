@@ -129,7 +129,32 @@ write_files:
       sudo docker run -d -e CATTLE_HOST_LABELS="spotinst.instanceId=`wget -qO- http://169.254.169.254/latest/meta-data/instance-id`" --privileged -v /var/run/docker.sock:/var/run/docker.sock rancher/agent:v0.8.2 http://rancher.$HOSTED_ZONE_NAME:8080/v1/scripts/$TOKEN_FROM_RANCHER_START_HOST_SCREEN
 ```
 
-## BuildKite Example Continuous Delivery Pipeline Example
+## Install Rancher CLI
+
+https://docs.rancher.com/rancher/v1.2/en/cli/
+
+### Install
+
+* Create a new Account API key for `cli`, save in lastpass
+* Download and install CLI by clicking in lower-right corner of Web UI.
+* Unzip and put executable in `/usr/local/bin`
+* `rancher config`
+  * URL: `http://rancher.$HOSTED_ZONE_NAME:8080`
+  * Access/Secret key created for `cli` above
+
+### Test various CLI commands
+
+Note: Some may be blank or not work until containers/services are created in subsequent steps
+
+* `rancher hosts`
+* `export RANCHER_DOCKER_HOST=<HOSTNAME of host>` or use `--host`
+  * Note this is the *internal* hostname, not the external hostname or IP.
+* `rancher docker ps`
+* `rancher ps`
+* `rancher ps -c`
+* `rancher exec -i -t <container ID or name from rancher ps> /bin/bash`
+
+## Set up Example Stack with Load Balancing in Rancher
 
 ### Manually create example docker image
 
@@ -159,15 +184,37 @@ write_files:
 ### Add a stack and service
 
 * Rancher UI - Stacks - Add Stack
-* 'ExampleStack'
+* Stack Name: 'ExampleStack' - Create
 * Add Service
-  * Name
+  * ~~ZERO containers (it will be started via load balancer)~~ 1 container
+  * Name 'ExampleWebserver'
   * Image (include tag, e.g.: `thewoolleyman/docker-webserver-example:20170323T035310-4d57408`)
-  * Port map: 80:80
+  * Port map: Public Host Port BLANK (for random), Private Container Port 80 (exposed by container)
   * Create
-* After started, click "i" for info, navigate to public IP and verify it serves the example html.  
+  
+### Add Load Balancer
+* In Rancher stack, click dropdown by "Add Service" and "Add load balancer"
+* LB Name: 'ExampleLoadBalancer'
+* Run 1 container
+* Port Rules: Public, HTTP, Request Host Port 80, target webservice 'ExampleWebserver', Port 80
+* Create
+* Verify:
+  * Go to example stack
+  * Wait until LB started
+  * Click "i" for info next to name
+  * Click "View Details"
+  * Ports tab
+  * navigate to Host IP and verify it serves the example webserver html.
 
 ### Add Route53
+* Stacks -> Add Infrastructure -> Add from catalog -> Route 53
+* Enter rancher aws key info
+* Enter $HOSTED_ZONE_NAME
+* Launch
+* Edit -> Service Links -> Pick Load balancer
+* Verify - go to ExampleLoadBalancer, info -> details, verify web server served at FQDN.
+
+## BuildKite Example Continuous Delivery Pipeline Example
 
 ### Create pipeline manual steps
 
@@ -175,8 +222,20 @@ write_files:
 
 ----
 
-## Various Gotchas
+## Various Tips/Gotchas
+
+### Tips
+
+* Using TCPDump to debug network issues:
+  * https://danielmiessler.com/study/tcpdump/#gs.YMVi1ds
+* Debugging containers
+  * use rancher CLI ssh to ssh to container
+  * `apt-get update`
+  * `apt-get install -y <package>` - e.g. telnet, wget, tcpdump
+
+### Gotchas
 
 * AWS Security Group
   * SSH Access didn't work for Rancher AMI.  Cause was that default security group Inbound rule had source
     set to 'custom' value of the security group, instead of 'anywhere'.  TODO: Set up properly.
+* Use random ports for containers, let Rancher manage them.
