@@ -92,7 +92,7 @@ The starting point for automation of test/build/delivery pipelines.
   * `aws ec2 attach-volume --volume-id $VOL_ID --instance-id $I_ID --device /dev/xvdm`
 * Assign DNS A record to instance's public IP:
   * Get Public IP Address: `aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=$VPC_ID`
-  * `aws route53 change-resource-record-sets --hosted-zone-id=$HOSTED_ZONE_ID --change-batch "{\"Changes\":[{\"Action\":\"UPSERT\",\"ResourceRecordSet\":{\"Name\":\"rancher.$HOSTED_ZONE_NAME\",\"Type\":\"A\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"$PUBLIC_IP_ADDRESS\"}]}}]}"`
+  * `aws route53 change-resource-record-sets --hosted-zone-id=$HOSTED_ZONE_ID --change-batch "{\"Changes\":[{\"Action\":\"UPSERT\",\"ResourceRecordSet\":{\"Name\":\"www-example.$HOSTED_ZONE_NAME\",\"Type\":\"CNAME\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"exampleloadbalancer.examplestack.default.illumin8.us.\"}]}}]}"`
 
 ### Rancher Server Setup
 
@@ -154,7 +154,7 @@ Note: Some may be blank or not work until containers/services are created in sub
 * `rancher ps -c`
 * `rancher exec -i -t <container ID or name from rancher ps> /bin/bash`
 
-## Set up Example Stack with Load Balancing in Rancher
+## Manual Set up of Example Stack with Load Balancing in Rancher
 
 ### Manually create example docker image
 
@@ -211,8 +211,13 @@ Note: Some may be blank or not work until containers/services are created in sub
 * Enter rancher aws key info
 * Enter $HOSTED_ZONE_NAME
 * Launch
-* Edit -> Service Links -> Pick Load balancer
 * Verify - go to ExampleLoadBalancer, info -> details, verify web server served at FQDN.
+
+### Create a shorter custom domain name for LB
+
+* Create a shorter custom Route53 CNAME to point to default template one autocreated via Route53.
+  * `source set-env-vars`
+  * `aws route53 change-resource-record-sets --hosted-zone-id=$HOSTED_ZONE_ID --change-batch "{\"Changes\":[{\"Action\":\"UPSERT\",\"ResourceRecordSet\":{\"Name\":\"rancher.$HOSTED_ZONE_NAME\",\"Type\":\"A\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"$PUBLIC_IP_ADDRESS\"}]}}]}"`
 
 ## BuildKite Example Continuous Delivery Pipeline Example
 
@@ -239,3 +244,5 @@ Note: Some may be blank or not work until containers/services are created in sub
   * SSH Access didn't work for Rancher AMI.  Cause was that default security group Inbound rule had source
     set to 'custom' value of the security group, instead of 'anywhere'.  TODO: Set up properly.
 * Use random ports for containers, let Rancher manage them.
+* Simple HTML page hosts may be cached by browser.  Use dev tools to explicitly clear cache or add a 
+  url param.  More info: https://css-tricks.com/strategies-for-cache-busting-css/
