@@ -8,6 +8,7 @@ For anything I need to do more than once, once I commit and push, everything els
 
 I will attempt to list everything I had to do manually here, even if it's not in complete detail.
  
+
 ## Buildkite
 
 The starting point for automation of test/build/delivery pipelines.
@@ -30,6 +31,7 @@ The starting point for automation of test/build/delivery pipelines.
 * Tweak CloudWatch rules:
   * scale down after 5 minutes instead of 30
   * scale up after 3 minutes instead of 1
+
 
 ## Rancher + Spotinst on AWS Initial Setup
 
@@ -79,6 +81,9 @@ The starting point for automation of test/build/delivery pipelines.
   * `aws route53 list-hosted-zones-by-name --dns-name $HOSTED_ZONE_NAME`
   * `aws ec2 authorize-security-group-ingress --group-id $SG_ID --protocol all --cidr 0.0.0.0/0`
   * `aws ec2 authorize-security-group-egress --group-id $SG_ID --protocol all --cidr 0.0.0.0/0`
+* Allocate public elastic IP for rancher server
+  * `aws ec2 allocate-address --domain vpc`
+  * `aws ec2 describe-addresses` # provides $ALLOCATION_ID and $PUBLIC_IP_ADDRESS
 
 ### AWS steps to Recreate RancherOS server instance
 
@@ -86,13 +91,14 @@ The starting point for automation of test/build/delivery pipelines.
   * `source ./set-env-vars`
 * Create and Name RancherOS server instance:
   * RancherOS AMI for $REGION region: https://github.com/rancher/os/blob/master/README.md
-  * `aws ec2 run-instances --region $REGION --image-id $AMI_ID --count 1 --instance-type t2.micro --subnet-id $SUBNET_ID_1 --security-group-ids $SG_ID --key-name rancher`
+  * `aws ec2 run-instances --region $REGION --image-id $AMI_ID --count 1 --instance-type t2.small --subnet-id $SUBNET_ID_1 --security-group-ids $SG_ID --key-name rancher`
   * `aws ec2 create-tags --resource $I_ID --tags Key=Name,Value=rancher-server`
+* Assign elastic IP
+  * `aws ec2 associate-address --instance-id $I_ID --allocation-id $ALLOCATION_ID`
 * Attach MYSQL EBS volume:
   * `aws ec2 attach-volume --volume-id $VOL_ID --instance-id $I_ID --device /dev/xvdm`
-* Assign DNS A record to instance's public IP:
-  * Get Public IP Address: `aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=$VPC_ID`
-  * `aws route53 change-resource-record-sets --hosted-zone-id=$HOSTED_ZONE_ID --change-batch "{\"Changes\":[{\"Action\":\"UPSERT\",\"ResourceRecordSet\":{\"Name\":\"www-example.$HOSTED_ZONE_NAME\",\"Type\":\"CNAME\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"exampleloadbalancer.examplestack.default.illumin8.us.\"}]}}]}"`
+* Assign DNS A record to instance's allocated public elastic IP:
+  * `aws route53 change-resource-record-sets --hosted-zone-id=$HOSTED_ZONE_ID --change-batch "{\"Changes\":[{\"Action\":\"UPSERT\",\"ResourceRecordSet\":{\"Name\":\"rancher.$HOSTED_ZONE_NAME\",\"Type\":\"A\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"$PUBLIC_IP_ADDRESS\"}]}}]}"`
 
 ### Rancher Server Setup
 
@@ -129,6 +135,7 @@ write_files:
       sudo docker run -d -e CATTLE_HOST_LABELS="spotinst.instanceId=`wget -qO- http://169.254.169.254/latest/meta-data/instance-id`" --privileged -v /var/run/docker.sock:/var/run/docker.sock rancher/agent:v0.8.2 http://rancher.$HOSTED_ZONE_NAME:8080/v1/scripts/$TOKEN_FROM_RANCHER_START_HOST_SCREEN
 ```
 
+
 ## Install Rancher CLI
 
 https://docs.rancher.com/rancher/v1.2/en/cli/
@@ -154,9 +161,19 @@ Note: Some may be blank or not work until containers/services are created in sub
 * `rancher ps -c`
 * `rancher exec -i -t <container ID or name from rancher ps> /bin/bash`
 
-## Manual Set up of Example Stack with Load Balancing in Rancher
 
-### Manually create example docker image
+## Add Rancher Route53 Infrastructure Stack
+
+* Stacks -> Add Infrastructure -> Add from catalog -> Route 53
+* Enter rancher aws key info
+* Enter $HOSTED_ZONE_NAME
+* Launch
+* Verify (after a stack is created below)
+  * Verify it looks right in AWS route53 UI.
+  * Verify - go to $RANCHER_LB_NAME, info -> details, verify web server served at FQDN.
+
+
+## Manually create example docker image
 
 * Docker notes
   * https://docs.docker.com/engine/userguide/eng-image/dockerfile_best-practices/#workdir
@@ -181,22 +198,25 @@ Note: Some may be blank or not work until containers/services are created in sub
   * `docker images` to verify
   * `docker push $DOCKER_NAMESPACE/$DOCKER_IMAGE_NAME`
 
-### Add a stack and service
+## Manual Set up of Example Stack with Load Balancing in Rancher via UI
 
+### Add a stack
 * Rancher UI - Stacks - Add Stack
-* Stack Name: 'ExampleStack' - Create
+* Stack Name: 'example-stack' - Create
+
+### Add Webserver service
 * Add Service
   * ~~ZERO containers (it will be started via load balancer)~~ 1 container
-  * Name 'ExampleWebserver'
+  * Name 'example-webserver'
   * Image (include tag, e.g.: `thewoolleyman/docker-webserver-example:20170323T035310-4d57408`)
   * Port map: Public Host Port BLANK (for random), Private Container Port 80 (exposed by container)
   * Create
   
 ### Add Load Balancer
 * In Rancher stack, click dropdown by "Add Service" and "Add load balancer"
-* LB Name: 'ExampleLoadBalancer'
+* LB Name: 'example-load-balancer'
 * Run 1 container
-* Port Rules: Public, HTTP, Request Host Port 80, target webservice 'ExampleWebserver', Port 80
+* Port Rules: Public, HTTP, Request Host Port 80, target webservice 'example-webserver', Port 80
 * Create
 * Verify:
   * Go to example stack
@@ -206,18 +226,30 @@ Note: Some may be blank or not work until containers/services are created in sub
   * Ports tab
   * navigate to Host IP and verify it serves the example webserver html.
 
-### Add Route53
-* Stacks -> Add Infrastructure -> Add from catalog -> Route 53
-* Enter rancher aws key info
-* Enter $HOSTED_ZONE_NAME
-* Launch
-* Verify - go to ExampleLoadBalancer, info -> details, verify web server served at FQDN.
-
-### Create a shorter custom domain name for LB
+## Create a shorter custom domain name for a Rancher LB
 
 * Create a shorter custom Route53 CNAME to point to default template one autocreated via Route53.
   * `source set-env-vars`
-  * `aws route53 change-resource-record-sets --hosted-zone-id=$HOSTED_ZONE_ID --change-batch "{\"Changes\":[{\"Action\":\"UPSERT\",\"ResourceRecordSet\":{\"Name\":\"rancher.$HOSTED_ZONE_NAME\",\"Type\":\"A\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"$PUBLIC_IP_ADDRESS\"}]}}]}"`
+  * `aws route53 change-resource-record-sets --hosted-zone-id=$HOSTED_ZONE_ID --change-batch "{\"Changes\":[{\"Action\":\"UPSERT\",\"ResourceRecordSet\":{\"Name\":\"www-example.$HOSTED_ZONE_NAME\",\"Type\":\"CNAME\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"$RANCHER_LB_NAME.$COMPOSE_PROJECT_NAME.$RANCHER_ENV.$HOSTED_ZONE_NAME.\"}]}}]}"`
+
+## Automated Set up of Example Stack with Load Balancing in Rancher via Rancher Compose CLI
+
+* Review docs:
+  * https://docs.docker.com/compose/
+  * https://docs.rancher.com/rancher/v1.5/en/cattle/rancher-compose/
+  * https://docs.rancher.com/rancher/v1.1/en/cattle/adding-services/
+* Download compose CLI by clicking bottom right of Rancher UI
+* install to `/usr/local/bin`
+* Create env API key:
+  * Go to Rancher UI -> API -> Keys -> Advanced -> Add Environment API Key
+  * Name `rancher-compose-<ENV>`, where ENV is `default` save in lastpass
+* Setup API keys
+  * `mkdir -p ~/.rancher/default`
+  * `vi ~/.rancher/default/api-keys`
+    * `RANCHER_ACCESS_KEY=XXX`
+    * `RANCHER_SECRET_KEY=YYY`
+* `source set-env-vars`
+* `rancher-compose -e ~/.rancher/default/api-keys -r rancher/$RANCHER_ENV/$COMPOSE_PROJECT_NAME/rancher-compose.yml up -d -u`
 
 ## BuildKite Example Continuous Delivery Pipeline Example
 
@@ -246,3 +278,4 @@ Note: Some may be blank or not work until containers/services are created in sub
 * Use random ports for containers, let Rancher manage them.
 * Simple HTML page hosts may be cached by browser.  Use dev tools to explicitly clear cache or add a 
   url param.  More info: https://css-tricks.com/strategies-for-cache-busting-css/
+* Use google DNS server (8.8.8.8), local DNS servers may not update by the TTL

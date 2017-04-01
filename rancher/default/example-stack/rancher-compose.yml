@@ -1,0 +1,23 @@
+version: '2'
+services:
+  example-webserver:
+    scale: 1
+    start_on_create: true
+  example-load-balancer:
+    scale: 1
+    start_on_create: true
+    lb_config:
+      certs: []
+      port_rules:
+      - path: ''
+        priority: 1
+        protocol: http
+        service: example-webserver
+        source_port: 80
+        target_port: 80
+    health_check:
+      response_timeout: 2000
+      healthy_threshold: 2
+      port: 42
+      unhealthy_threshold: 3
+      interval: 2000
