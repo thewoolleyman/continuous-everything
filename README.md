@@ -28,9 +28,13 @@ The starting point for automation of test/build/delivery pipelines.
   * For now, I just made a 'buildkite' IAM user and group with full
     Administrator access
 * Create buckets for secrets and artifacts, specify in CloudFormation form
-* Tweak CloudWatch rules:
-  * scale down after 5 minutes instead of 30
-  * scale up after 3 minutes instead of 1
+* Tweak CloudWatch rules (CloudWatch -> Alarms -> Check one -> Actions -> Modify):
+  * ~~scale down after 5 minutes instead of 30~~
+  * ~~scale up after 5 minutes instead of 1~~
+* Tweak EC2 Autoscaling Group 
+  (EC2 -> Auto Scaling -> Auto Scaling Groups -> Check buildkite one -> Actions -> Edit -> Scaling policies)
+  * AgentScaleUpPolicy -> Actions -> Edit
+  * Wait 360 seconds instead of 120 before allowing another scaleup activity (give agents time to start and run builds)
 
 
 ## Rancher + Spotinst on AWS Initial Setup
@@ -251,11 +255,30 @@ Note: Some may be blank or not work until containers/services are created in sub
 * `source set-env-vars`
 * `rancher-compose -e ~/.rancher/default/api-keys -r rancher/$RANCHER_ENV/$COMPOSE_PROJECT_NAME/rancher-compose.yml up -d -u`
 
-## BuildKite Example Continuous Delivery Pipeline Example
+## BuildKite Example Continuous Delivery Pipeline Example Manual Setup
 
-### Create pipeline manual steps
+* Log into buildkite.com
 
-* Log into buildkite.com, create pipeline
+### Create docker-webserver-example pipeline
+
+* Create pipeline `docker-webserver-example`
+  * repo URL
+  * Add step to read steps from pipeline
+* Set up webhook
+  * https://buildkite.com/continuous-everything/docker-webserver-example/settings/setup/github
+  * Follow instructions
+* Add secrets
+  * https://github.com/buildkite/elastic-ci-stack-for-aws#build-secrets
+  * https://buildkite.com/docs/agent/hooks#creating-hook-scripts
+  * Generate `private_ssh_key` requires for buildkite secrets
+    * `ssh-keygen -t rsa -b 4096 -f id_rsa_buildkite`
+    * save in lastpass
+    * upload using s3 CLI command in above links 
+  * Create temp files for following hook scripts according to example in above links, upload to `continuous-everything-buildkite-secrets`
+    bucket.  Should contain the following scripts/vars:
+    * 
+    * `/env`
+      * asdf
 
 ----
 
