@@ -27,7 +27,9 @@ The starting point for automation of test/build/delivery pipelines.
     role switching and consolidated billing".
   * For now, I just made a 'buildkite' IAM user and group with full
     Administrator access
-* Create buckets for secrets and artifacts, specify in CloudFormation form
+* Create buckets for secrets and artifacts, specify in CloudFormation form.  Make sure that
+  they are in the same region as you will be running your stack and instances, or the secrets
+  may not be readable!
 * Tweak CloudWatch rules (CloudWatch -> Alarms -> Check one -> Actions -> Modify):
   * ~~scale down after 5 minutes instead of 30~~
   * ~~scale up after 5 minutes instead of 1~~
@@ -261,6 +263,9 @@ Note: Some may be blank or not work until containers/services are created in sub
 
 ### Create docker-webserver-example pipeline
 
+* Create dedicated dockerhub user for pushing docker from buildkite
+  * user: continuouseverything, pass: random
+  * add as a collaborator to existing dockerhub repo
 * Create pipeline `docker-webserver-example`
   * repo URL
   * Add step to read steps from pipeline
@@ -272,13 +277,26 @@ Note: Some may be blank or not work until containers/services are created in sub
   * https://buildkite.com/docs/agent/hooks#creating-hook-scripts
   * Generate `private_ssh_key` requires for buildkite secrets
     * `ssh-keygen -t rsa -b 4096 -f id_rsa_buildkite`
-    * save in lastpass
-    * upload using s3 CLI command in above links 
-  * Create temp files for following hook scripts according to example in above links, upload to `continuous-everything-buildkite-secrets`
-    bucket.  Should contain the following scripts/vars:
-    * 
+    * save keys in lastpass and copy to `~/.ssh`
+    * Add public key to github repo Settings -> Deploy Keys, named "buildkite"
+  * Create temp files for following hook scripts according to example in above links, upload to
+   `continuous-everything-buildkite-secrets` bucket using s3 CLI command in above links:
+    Should contain the following scripts/vars:
+    * `/private_ssh_key`
+      * Generated above, don't forget to add public key to github as deploy key
+      * `aws s3 cp --acl private --sse aws:kms ~/.ssh/id_rsa_buildkite "s3://continuous-everything-buildkite-secrets/private_ssh_key"`
     * `/env`
-      * asdf
+      ```
+      #!/bin/bash
+      
+      set -eu
+      
+      echo '--- :house_with_garden: Setting up the environment'
+      
+      export DOCKER_USER=continuouseverything
+      export DOCKER_PASS=<generated above>
+      ```
+    * `aws s3 cp --acl private --sse aws:kms /tmp/env "s3://continuous-everything-buildkite-secrets/env"`
 
 ----
 
