@@ -300,6 +300,71 @@ Note: Some may be blank or not work until containers/services are created in sub
 
 ----
 
+## Local Bare-Metal RancherOS Host Setup
+
+### Set up box
+
+* Get a PC
+* Download latest Ubuntu Desktop and burn to DVD (uses some additional resources, but device drivers just work, and easier
+  to configure, monitor, and upgrade)
+* Install Ubuntu Desktop on host box (`perro`)
+* Install apps:
+  * VirtualBox: `sudo apt-get install virtualbox`
+  * curl: `sudo apt-get install curl`
+  * Docker Machine:
+    * curl -L https://github.com/docker/machine/releases/download/v0.10.0/docker-machine-`uname -s`-`uname -m` >/tmp/docker-machine
+    * chmod +x /tmp/docker-machine
+    * sudo cp /tmp/docker-machine /usr/local/bin/docker-machine
+* Download RancherOS ISO and install to VirtualBox
+  * http://docs.rancher.com/os/running-rancheros/workstation/docker-machine/
+  * `sudo docker-machine create -d virtualbox --virtualbox-boot2docker-url <LOCATION-OF-RANCHEROS-ISO> <MACHINE-NAME>`
+  * MACHINE-NAME=`homeranch`
+  * boot vm, should auto-login
+* Verify it's up: `sudo docker-machine ssh homeranch` (should not need password or key)
+* Configure VirtualBox instance   
+  * `sudo virtualbox` (can't see the machine as non-root user)
+  * shut down VM
+  * Settings -> General
+    * Motherboard: Allocate most of system memory, leave ~2G for host
+    * Processor: Allocate all Physical cores
+  * ~~Tunnel RancherOS host/port to host machine~~
+    * (This doesn't work, forwarded ports aren't visible outside host box)
+    * http://stackoverflow.com/questions/36286305/how-do-i-forward-a-docker-machine-port-to-my-host-port-on-osx
+    * rancheros500, UDP, Host IP/Port: 127.0.0.1 500, Guest Port 500
+    * rancheros4500, UDP, Host IP/Port: 127.0.0.1 4500, Guest Port 4500
+    * (should already exist by default, but change port) ssh, TCP, Host IP/Port: 127.0.0.1, port 4222, Guest Port 22
+      * Note: This will not be exposed to the internet, but accessible inside LAN, for easy SSH access to VM, and also
+        for testing port forwarding and firewall rules if necessary, since UDP ports are hard to test.
+  * Set bridged networking
+    * Settings -> Network -> Change Adapter 1 -> NAT to Bridged
+  * boot VM
+* Note IP and MAC address of bridged adapter
+  * in Vbox terminal, `sudo ifconfig -a | more` - get info for `eth0`
+* Copy/backup auto-created SSH keypair (assumes you have no existing ssh keypair on host):
+  * `sudo cp /home/woolley/.docker/machine/machines/homeranch/id_rsa ~/.ssh/`
+  * `sudo cp /home/woolley/.docker/machine/machines/homeranch/id_rsa.pub ~/.ssh/`
+  * `sudo chown woolley:woolley ~/.ssh/id_rsa*`
+  * Copy them to lastpass
+* Test direct SSH access from host: `ssh rancher@<homeranch IP>`
+* Assign dedicated/static DHCP IP address to VM on LAN
+  * Use MAC from above, reserve, optionally change IP and reboot/renew DHCP
+* Test access from a different host using same ssh key
+  * Download ssh key from lastpass to ~/.ssh/id_rsa_homeranch, `chmod 600 ~/.ssh/id_rsa_homeranch`
+  * `ssh -i ~/.ssh/id_rsa_homeranch rancher@<reserved IP>
+  * Optional and Temporary: on router, forward external tcp port 4222 to 22 on VM to test external routing,
+    then ensure it is open from AWS rancher server, then delete 
+* Open UDP ports 500 4500 (NOT ssh) to internet in router
+  * Port Forwarding: tunnel external UDP 500 and 4500 to VM
+* Add as host in rancher server
+  * Log into rancher UI
+  * Infrastructure -> Hosts -> Add Host -> Custom
+    * Set Public IP to hostname assigned to routers internet static IP
+    * Copy and paste setup command into ssh session logged into VM
+  * Should show up on hosts screen in a minute
+  * Click name and verify memory, etc
+
+----
+
 ## Various Tips/Gotchas
 
 ### Tips
