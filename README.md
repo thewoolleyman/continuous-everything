@@ -363,10 +363,14 @@ Note: Some may be blank or not work until containers/services are created in sub
   * Should show up on hosts screen in a minute
   * Click name and verify memory, etc
 * Virtualbox automatic start on host reboot
-  * (via GUI because I was too lazy to figure out systemd config, along with seemingly everyone else on google)
-  * Search your computer -> Startup Applications -> Add
-  * Name: "virtualbox homeranch", Command: "sudo vboxmanage startvm homeranch --type=headless"
-  * Add host user to `sudo` group: `sudo usermod -a -G sudo UbuntuUser`
+  * TODO: neither of these worked
+    * ~~(via GUI because I was too lazy to figure out systemd config, along with seemingly everyone else on google)~~
+      * Search your computer -> Startup Applications -> Add
+      * Name: "virtualbox homeranch", Command: "sudo vboxmanage startvm homeranch --type=headless"
+      * Add host user to `sudo` group: `sudo usermod -a -G sudo UbuntuUser`
+    * ~~Via script~~
+      * `sudo vi /etc/sudoers.d/vboxmanage`
+      * Add line: `woolley perro = (root) NOPASSWD: /usr/bin/vboxmanage`
 ----
 
 ## Various Tips/Gotchas
