@@ -234,7 +234,7 @@ Note: Some may be blank or not work until containers/services are created in sub
 
 ## Create a shorter custom domain name for a Rancher LB
 
-* Create a shorter custom Route53 CNAME to point to default template one autocreated via Route53.
+* Create a shorter custom Route53 CNAME ([www-example.illumin8.us](http://www-example.illumin8.us/) to point to default template one autocreated via Route53.
   * `source set-env-vars`
   * `aws route53 change-resource-record-sets --hosted-zone-id=$HOSTED_ZONE_ID --change-batch "{\"Changes\":[{\"Action\":\"UPSERT\",\"ResourceRecordSet\":{\"Name\":\"www-example.$HOSTED_ZONE_NAME\",\"Type\":\"CNAME\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"$RANCHER_LB_NAME.$COMPOSE_PROJECT_NAME.$RANCHER_ENV.$HOSTED_ZONE_NAME.\"}]}}]}"`
 
