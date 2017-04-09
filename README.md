@@ -371,6 +371,11 @@ Note: Some may be blank or not work until containers/services are created in sub
     * ~~Via script~~
       * `sudo vi /etc/sudoers.d/vboxmanage`
       * Add line: `woolley perro = (root) NOPASSWD: /usr/bin/vboxmanage`
+ * Host Labels
+   * services/load balancers are assigned to hosts in the Upgrade -> Scheduling tab using Host Labels
+   * Not sure how to set host label with virtualmachine/docker-compose, would be something like `CATTLE_HOST_LABELS='name=homeranch'`
+   * Workaround is to set it in the Rancher GUI by editing the running host (but won't persist on host recreate).
+   
 ----
 
 ## Various Tips/Gotchas
