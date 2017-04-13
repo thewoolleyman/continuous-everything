@@ -38,6 +38,17 @@ The starting point for automation of test/build/delivery pipelines.
   * AgentScaleUpPolicy -> Actions -> Edit
   * Wait 360 seconds instead of 120 before allowing another scaleup activity (give agents time to start and run builds)
 
+### Adding a buildkite agent manually on Rancher custom host
+
+* Buildkite UI -> Agents -> Docker -> Alpine version
+* Rancher UI -> Stacks -> Add Stack -> `buildkite-agent`
+* Add Service
+  * name: `buildkite-agent`
+  * use alpine docker tag for image: `buildkite/agent` 
+  * Command
+    * Expand Env Vars -> add BUILDKITE_AGENT_TOKEN
+    * Scheduling tab -> Add scheduling rule -> Pick Host -> Host label -> name=homeranch
+* TODO: get secrets/ssh keys onto custom host
 
 ## Rancher + Spotinst on AWS Initial Setup
 
@@ -254,8 +265,51 @@ Note: Some may be blank or not work until containers/services are created in sub
   * `vi ~/.rancher/default/api-keys`
     * `RANCHER_ACCESS_KEY=XXX`
     * `RANCHER_SECRET_KEY=YYY`
-* `source set-env-vars`
-* `rancher-compose -e ~/.rancher/default/api-keys -r rancher/$RANCHER_ENV/$COMPOSE_PROJECT_NAME/rancher-compose.yml up -d -u`
+* Note: The compose configs will live in the individual project repos, eventually as scripts
+  * `source set-env-vars`
+  * `rancher-compose -e ~/.rancher/default/api-keys -r rancher/$RANCHER_ENV/$COMPOSE_PROJECT_NAME/rancher-compose.yml up -d -u`
+
+## Automated Upgrade of Rancher Service to New Docker Image Tag
+
+* ~~API Approach~~
+  * NOTE: Didn't end up using API approach, too hard to manually manage image state, just 
+    ran `rancher-compose up` with right options.  Left here for reference on API usage  
+  * Create new Rancher API account key for buildkite deploys, save in Lastpass
+  * In Rancher UI, stacks -> example stack -> example webserver -> '...' dropdown -> View in API
+  * Grab URL, export API values and test them via curl:
+    * `curl -s -u $RANCHER_API_USERNAME:$RANCHER_API_PASSWORD http://rancher.illumin8.us:8080/v2-beta/projects/1a5/services/1s31 | jq`
+  * TODO: Walk the links from the API root instead of hardcoding IDs in URL.  See: https://docs.rancher.com/rancher/v1.4/en/api/v2-beta/
+  * not-working too-simplistic API upgrade script:
+      ```
+      RANCHER_PROJECT_ID=1a5
+      RANCHER_SERVER=rancher.illumin8.us:8080
+      RANCHER_SERVICE_ID=1s31
+      ```
+
+      ```
+      #!/usr/bin/env bash
+      
+      run() {
+        local dir=$(dirname ${BASH_SOURCE})
+        source "${dir}/bash-boilerplate.sh"
+      
+        source "${dir}/set-env-vars.sh"
+      
+        # TODO: walk links in API instead of hardcoding
+        local image_uuid=$(cat /tmp/image_uuid)
+        local service_endpoint="http://${RANCHER_SERVER}/v2-beta/projects/${RANCHER_PROJECT_ID}/services/${RANCHER_SERVICE_ID}"
+        local creds="${RANCHER_API_USERNAME}:${RANCHER_API_PASSWORD}"
+        local launch_config=$(curl -s -u ${creds} ${service_endpoint} | jq -c '.launchConfig')
+        local new_launch_config=$(echo ${launch_config} | jq -c '. .imageUuid = "'$image_uuid'"')
+        local upgrade_json='{"inServiceStrategy":{"launchConfig": '$new_launch_config'}}'
+        curl -X POST -H 'Content-Type: application/json' -s -u ${creds} -d "${upgrade_json}" "${service_endpoint}?action=upgrade" | jq
+      }
+      
+      run
+      ```
+* `rancher-compose` approach
+  * Add api-keys exports to buildkite secrets file on S3, re-upload.
+  * See https://github.com/thewoolleyman/docker-webserver-example/blob/master/ci/upgrade
 
 ## BuildKite Example Continuous Delivery Pipeline Example Manual Setup
 
@@ -297,6 +351,8 @@ Note: Some may be blank or not work until containers/services are created in sub
       export DOCKER_PASS=<generated above>
       ```
     * `aws s3 cp --acl private --sse aws:kms /tmp/env "s3://continuous-everything-buildkite-secrets/env"`
+    * NOTE: to get a local copy for updating, revert the `cp` params, update, then re-upload:
+      * `aws s3 cp --acl private --sse aws:kms "s3://continuous-everything-buildkite-secrets/env" /tmp/env`
 
 ----
 
