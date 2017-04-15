@@ -40,7 +40,41 @@ The starting point for automation of test/build/delivery pipelines.
 
 ### Adding a buildkite agent manually on Rancher custom host
 
+NOTE: Requires rancher custom host to already be set up via steps below.  The main reason to have this
+in addition to elastic ci stack for AWS is that it's always on and available to start builds immediately,
+whereas the aws stack takes ~2 minutes to spin up.  Alternately, it could be set up on a cheap Rimuhosting
+or DigitalOcean box.
+
 * Buildkite UI -> Agents -> Docker -> Alpine version
+* First, get secrets/ssh keys onto custom host:
+  * ssh to custom host
+  * `sudo mkdir /buildkite`, `sudo chown rancher:rancher /buildkite`
+  * scp `/buildkite/environment` file up to custom host (same as one for aws elastic stack bucket, 
+    but named the default `environment`, not `env`):
+    ```
+    #!/bin/bash
+    
+    set -eu
+    
+    echo '--- :house_with_garden: Setting up the environment'
+    
+    export DOCKER_USER=continuouseverything
+    export DOCKER_PASS=<generated above>
+    export RANCHER_ACCESS_KEY=<buildkite account api key from rancher>
+    export RANCHER_SECRET_KEY=<buildkite account api key from rancher>
+    ```
+  * scp `/buildkite/id_rsa` github private key file up to custom host (same as one for aws elastic stack bucket,
+    but name it `id_rsa` instead of `id_rsa_buildkite` (should be in lastpass)
+  * scp `/buildkite/pre-checkout` file up to custom host 
+    ```
+    #!/bin/bash
+    
+    set -eu
+    
+    echo '--- :github: Copying buildkite github private key to ~/.ssh/id_rsa'
+    
+    cp /buildkite/id_rsa ~/.ssh/id_rsa
+    ```
 * Rancher UI -> Stacks -> Add Stack -> `buildkite-agent`
 * Add Service
   * name: `buildkite-agent`
@@ -48,7 +82,7 @@ The starting point for automation of test/build/delivery pipelines.
   * Command
     * Expand Env Vars -> add BUILDKITE_AGENT_TOKEN
     * Scheduling tab -> Add scheduling rule -> Pick Host -> Host label -> name=homeranch
-* TODO: get secrets/ssh keys onto custom host
+* TODO: Not running environment hook...
 
 ## Rancher + Spotinst on AWS Initial Setup
 
@@ -349,16 +383,19 @@ Note: Some may be blank or not work until containers/services are created in sub
       
       export DOCKER_USER=continuouseverything
       export DOCKER_PASS=<generated above>
+      export RANCHER_ACCESS_KEY=<from rancher, can be added later>
+      export RANCHER_SECRET_KEY=<from rancher, can be added later>
       ```
     * `aws s3 cp --acl private --sse aws:kms /tmp/env "s3://continuous-everything-buildkite-secrets/env"`
     * NOTE: to get a local copy for updating, revert the `cp` params, update, then re-upload:
+      * `aws s3 cp --acl private --sse aws:kms "s3://continuous-everything-buildkite-secrets/private_ssh_key" ~/.ssh/id_rsa_buildkite`
       * `aws s3 cp --acl private --sse aws:kms "s3://continuous-everything-buildkite-secrets/env" /tmp/env`
 
 ----
 
-## Local Bare-Metal RancherOS Host Setup
+## Local RancherOS Host Setup
 
-### Set up box
+### Approach 1: Ubuntu desktop + Docker Machine + Virtualbox
 
 * Get a PC
 * Download latest Ubuntu Desktop and burn to DVD (uses some additional resources, but device drivers just work, and easier
@@ -402,22 +439,6 @@ Note: Some may be blank or not work until containers/services are created in sub
   * `sudo chown woolley:woolley ~/.ssh/id_rsa*`
   * Copy them to lastpass
 * Test direct SSH access from host: `ssh rancher@<homeranch IP>`
-* Assign dedicated/static DHCP IP address to VM on LAN
-  * Use MAC from above, reserve, optionally change IP and reboot/renew DHCP
-* Test access from a different host using same ssh key
-  * Download ssh key from lastpass to ~/.ssh/id_rsa_homeranch, `chmod 600 ~/.ssh/id_rsa_homeranch`
-  * `ssh -i ~/.ssh/id_rsa_homeranch rancher@<reserved IP>
-  * Optional and Temporary: on router, forward external tcp port 4222 to 22 on VM to test external routing,
-    then ensure it is open from AWS rancher server, then delete 
-* Open UDP ports 500 4500 (NOT ssh) to internet in router
-  * Port Forwarding: tunnel external UDP 500 and 4500 to VM
-* Add as host in rancher server
-  * Log into rancher UI
-  * Infrastructure -> Hosts -> Add Host -> Custom
-    * Set Public IP to hostname assigned to routers internet static IP
-    * Copy and paste setup command into ssh session logged into VM
-  * Should show up on hosts screen in a minute
-  * Click name and verify memory, etc
 * Virtualbox automatic start on host reboot
   * TODO: neither of these worked
     * ~~(via GUI because I was too lazy to figure out systemd config, along with seemingly everyone else on google)~~
@@ -427,10 +448,80 @@ Note: Some may be blank or not work until containers/services are created in sub
     * ~~Via script~~
       * `sudo vi /etc/sudoers.d/vboxmanage`
       * Add line: `woolley perro = (root) NOPASSWD: /usr/bin/vboxmanage`
+      
+### Approach 2 - "bare metal"
+ 
+Installed RancherOS directly to disk, for better performance (not through virtualbox)
+
+https://docs.rancher.com/os/running-rancheros/server/install-to-disk/
+
+NOTE: I used the `cloud-config.yml` exported from RancherOS instance created under virtualbox
+above, including SSH keys I already had on another box and lastpass, by ssh'ing to it
+and running `sudo ros config export`.
+
+* Get a PC
+* Download and burn RancherOS
+* Get the `cloud-config.yml` onto a machine on the network with SSH port open so you can scp it:
+
+```yaml
+`sudo ros config export`
+
+EXTRA_CMDLINE: /init
+hostname: homeranch
+rancher:
+  autologin: ttyS0
+  environment:
+    EXTRA_CMDLINE: /init
+  network:
+    interfaces:
+      eth0:
+        dhcp: true
+      eth1:
+        dhcp: true
+      lo:
+        address: 127.0.0.1/8
+  state:
+    autoformat: []
+    dev: ""
+ssh_authorized_keys:
+- ssh-rsa XXX
+users:
+- name: docker
+  ssh_authorized_keys:
+  - ssh-rsa XXX
+```
+
+* Boot PC from RancherOS dvd
+* Partition the disk
+  * remove any existing partitions
+    * `sudo parted -l`
+    * `sudo parted /dev/sda rm N` # for every partition
+    * Partition entire (now empty) drive: `sudo parted -a opt /dev/sda mkpart primary ext4 0% 100%`
+* scp the `cloud-config.yml` to home dir
+* Install RancherOS: `sudo ros install -c cloud-config.yml -d /dev/sda`. Let it finish and reboot (remove DVD)
+   
+### Finish Common setup for both approaches
+   
+* Assign dedicated/static DHCP IP address to VM on LAN
+  * Use MAC from above, reserve, optionally change IP and reboot/renew DHCP
+* Test access from a different host using same ssh key
+  * Download ssh key from lastpass to ~/.ssh/id_rsa_homeranch, `chmod 600 ~/.ssh/id_rsa_homeranch`
+  * `ssh -i ~/.ssh/id_rsa_homeranch rancher@<reserved IP>`
+  * Optional and Temporary: on router, forward external tcp port 4222 (approach 1) or 22 (approach 2)
+    to 22 on VM to test external routing,
+    then ensure it is open from AWS rancher server, then delete 
+* Open UDP ports 500 4500 (NOT ssh) to internet in router
+  * Port Forwarding: tunnel external UDP 500 and 4500 to VM
+* Add as host in rancher server
+  * Log into rancher UI
+  * Infrastructure -> Hosts -> Add Host -> Custom
+    * Add label: `name=homeranch`
+    * Set Public IP to hostname assigned to routers internet static IP
+    * Copy and paste setup command into ssh session logged into VM
+  * Should show up on hosts screen in a minute
+  * Click name and verify memory, etc
  * Host Labels
    * services/load balancers are assigned to hosts in the Upgrade -> Scheduling tab using Host Labels
-   * Not sure how to set host label with virtualmachine/docker-compose, would be something like `CATTLE_HOST_LABELS='name=homeranch'`
-   * Workaround is to set it in the Rancher GUI by editing the running host (but won't persist on host recreate).
    
 ----
 
