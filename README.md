@@ -49,8 +49,8 @@ or DigitalOcean box.
 * First, get secrets/ssh keys onto custom host:
   * ssh to custom host
   * `sudo mkdir /buildkite`, `sudo chown rancher:rancher /buildkite`
-  * scp `/buildkite/environment` file up to custom host (same as one for aws elastic stack bucket, 
-    but named the default `environment`, not `env`):
+  * scp `/buildkite/hooks/environment` file up to custom host (same as one for aws elastic stack bucket, 
+    but named the default `hooks/environment`, not `env`):
     ```
     #!/bin/bash
     
@@ -65,7 +65,7 @@ or DigitalOcean box.
     ```
   * scp `/buildkite/id_rsa` github private key file up to custom host (same as one for aws elastic stack bucket,
     but name it `id_rsa` instead of `id_rsa_buildkite` (should be in lastpass)
-  * scp `/buildkite/pre-checkout` file up to custom host 
+  * scp `/buildkite/hooks/pre-checkout` file up to custom host 
     ```
     #!/bin/bash
     
@@ -78,7 +78,7 @@ or DigitalOcean box.
 * Rancher UI -> Stacks -> Add Stack -> `buildkite-agent`
 * Add Service
   * name: `buildkite-agent`
-  * use alpine docker tag for image: `buildkite/agent` 
+  * use alpine docker tag for image (beta, so mounted dir doesn't need bootstrap.sh): `buildkite/agent:beta` 
   * Command
     * Expand Env Vars -> add BUILDKITE_AGENT_TOKEN
     * Scheduling tab -> Add scheduling rule -> Pick Host -> Host label -> name=homeranch
@@ -535,6 +535,17 @@ users:
   * use rancher CLI ssh to ssh to container
   * `apt-get update`
   * `apt-get install -y <package>` - e.g. telnet, wget, tcpdump
+* Debugging hooks in docker buildkite agent
+  * Set up hooks and ssh key:
+    * Create user-owned `/tmp/buildkite` dir on local dev box
+    * Create `/tmp/buildkite/hooks` dir
+    * Create any hooks into hooks dir, e.g. `environment` and `pre-checkout`
+    * Copy `id_rsa_buildkite` to `/buildkite/id_rsa`
+  * Start docker image locally:
+    * `docker rm buildkite-agent` (if there is an old one with same name stopped)
+    * `docker run --name buildkite-agent -it -v /var/run/docker.sock:/var/run/docker.sock -v /tmp/buildkite:/buildkite -e BUILDKITE_AGENT_TOKEN=$BUILDKITE_AGENT_TOKEN buildkite/agent:beta`
+  * SSH into docker container locally: `docker exec -it buildkite-agent bash`
+  * Run 
 
 ### Gotchas
 
