@@ -13,7 +13,7 @@ I will attempt to list everything I had to do manually here, even if it's not in
 
 The starting point for automation of test/build/delivery pipelines.
 
-### Buildkite Manual Steps
+### Buildkite AWS Elastic Stack Setup Manual Steps
 
 * Get an account on AWS
 * Enable billing alerts:
@@ -37,6 +37,37 @@ The starting point for automation of test/build/delivery pipelines.
   (EC2 -> Auto Scaling -> Auto Scaling Groups -> Check buildkite one -> Actions -> Edit -> Scaling policies)
   * AgentScaleUpPolicy -> Actions -> Edit
   * Wait 360 seconds instead of 120 before allowing another scaleup activity (give agents time to start and run builds)
+* Add secrets
+  * https://github.com/buildkite/elastic-ci-stack-for-aws#build-secrets
+  * https://buildkite.com/docs/agent/hooks#creating-hook-scripts
+  * Generate `private_ssh_key` requires for buildkite secrets
+    * `ssh-keygen -t rsa -b 4096 -f id_rsa_buildkite`
+    * save keys in lastpass and copy to `~/.ssh`
+    * Add public key to github repo Settings -> Deploy Keys, named "buildkite"
+  * Create temp files for following hook scripts according to example in above links, upload to
+   `continuous-everything-buildkite-secrets` bucket using s3 CLI command in above links:
+    Should contain the following scripts/vars:
+    * `/private_ssh_key`
+      * Generated above, don't forget to add public key to github as deploy key
+      * `aws s3 cp --acl private --sse aws:kms ~/.ssh/id_rsa_buildkite "s3://continuous-everything-buildkite-secrets/private_ssh_key"`
+    * `/env`
+      ```bash
+      #!/bin/bash
+      
+      set -eu
+      
+      echo '--- :house_with_garden: Setting up the environment'
+      
+      export DOCKER_USER=continuouseverything
+      export DOCKER_PASS='<generated above>'
+      export RANCHER_ACCESS_KEY='<from rancher, can be added later>'
+      export RANCHER_SECRET_KEY='<from rancher, can be added later>'
+      ```
+    * `aws s3 cp --acl private --sse aws:kms /tmp/env "s3://continuous-everything-buildkite-secrets/env"`
+    * NOTE: to get a local copy for updating, revert the `cp` params, update, then re-upload:
+      * `aws s3 cp --acl private --sse aws:kms "s3://continuous-everything-buildkite-secrets/private_ssh_key" ~/.ssh/id_rsa_buildkite`
+      * `aws s3 cp --acl private --sse aws:kms "s3://continuous-everything-buildkite-secrets/env" /tmp/env`
+
 
 ### Adding a buildkite agent manually on Rancher custom host
 
@@ -45,36 +76,35 @@ in addition to elastic ci stack for AWS is that it's always on and available to 
 whereas the aws stack takes ~2 minutes to spin up.  Alternately, it could be set up on a cheap Rimuhosting
 or DigitalOcean box.
 
+* Review docs for buildkite docker agent: https://github.com/buildkite/docker-buildkite-agent
 * Buildkite UI -> Agents -> Docker -> Alpine version
 * First, get secrets/ssh keys onto custom host:
   * ssh to custom host
-  * `sudo mkdir /buildkite`, `sudo chown rancher:rancher /buildkite`
-  * scp `/buildkite/hooks/environment` file up to custom host (same as one for aws elastic stack bucket, 
-    but named the default `hooks/environment`, not `env`):
-    ```
-    #!/bin/bash
-    
-    set -eu
-    
-    echo '--- :house_with_garden: Setting up the environment'
-    
-    export DOCKER_USER=continuouseverything
-    export DOCKER_PASS=<generated above>
-    export RANCHER_ACCESS_KEY=<buildkite account api key from rancher>
-    export RANCHER_SECRET_KEY=<buildkite account api key from rancher>
-    ```
-  * scp `/buildkite/id_rsa` github private key file up to custom host (same as one for aws elastic stack bucket,
-    but name it `id_rsa` instead of `id_rsa_buildkite` (should be in lastpass)
-  * scp `/buildkite/hooks/pre-checkout` file up to custom host 
-    ```
-    #!/bin/bash
-    
-    set -eu
-    
-    echo '--- :github: Copying buildkite github private key to ~/.ssh/id_rsa'
-    
-    cp /buildkite/id_rsa ~/.ssh/id_rsa
-    ```
+    * `sudo mkdir -p /buildkite/hooks`
+    * `sudo chown -R rancher:rancher /buildkite`
+  * Make secret files to upload to host   
+    * `/tmp/buildkite/hooks/environment` - same as one for aws elastic stack bucket, 
+      but named the default `hooks/environment`, not `env`:
+      ```bash
+      #!/bin/bash
+      
+      set -eu
+      
+      echo '--- :house_with_garden: Setting up the environment'
+      
+      export DOCKER_USER=continuouseverything
+      export DOCKER_PASS='<generated previously during aws elastic stack setup>'
+      export RANCHER_ACCESS_KEY='<buildkite account api key from rancher>'
+      export RANCHER_SECRET_KEY='<buildkite account api key from rancher>'
+  
+      echo '--- :github: Copying buildkite github private key to ~/.ssh/id_rsa'
+      
+      cp /buildkite/hooks/id_rsa ~/.ssh/id_rsa
+      ```
+    * `/buildkite/hooks/id_rsa` github private key file up to custom host - same as one
+      for aws elastic stack bucket, but name it `id_rsa` instead of `id_rsa_buildkite` (should be in lastpass)
+  * scp files up to custom host
+    * `scp -i ~/.ssh/id_rsa_homeranch /tmp/buildkite/hooks/* rancher@10.0.100.42:/buildkite/hooks/`
 * Rancher UI -> Stacks -> Add Stack -> `buildkite-agent`
 * Add Service
   * name: `buildkite-agent`
@@ -82,7 +112,9 @@ or DigitalOcean box.
   * Command
     * Expand Env Vars -> add BUILDKITE_AGENT_TOKEN
     * Scheduling tab -> Add scheduling rule -> Pick Host -> Host label -> name=homeranch
-* TODO: Not running environment hook...
+  * Volumes
+    * Add volume for hooks: `/buildkite/hooks:/buildkite/hooks`
+    * Add volume to mount docker socket: `/var/run/docker.sock:/var/run/docker.sock`
 
 ## Rancher + Spotinst on AWS Initial Setup
 
@@ -168,7 +200,7 @@ or DigitalOcean box.
 * follow instructions - put in appropriate values
 * On "compute" tab, enter following user data cloud-config for rancherOS host instances - replace host and token:
 
-```
+```yaml
 #cloud-config
 write_files:
   - path: /etc/rc.local
@@ -314,13 +346,13 @@ Note: Some may be blank or not work until containers/services are created in sub
     * `curl -s -u $RANCHER_API_USERNAME:$RANCHER_API_PASSWORD http://rancher.illumin8.us:8080/v2-beta/projects/1a5/services/1s31 | jq`
   * TODO: Walk the links from the API root instead of hardcoding IDs in URL.  See: https://docs.rancher.com/rancher/v1.4/en/api/v2-beta/
   * not-working too-simplistic API upgrade script:
-      ```
+      ```bash
       RANCHER_PROJECT_ID=1a5
       RANCHER_SERVER=rancher.illumin8.us:8080
       RANCHER_SERVICE_ID=1s31
       ```
 
-      ```
+      ```bash
       #!/usr/bin/env bash
       
       run() {
@@ -360,36 +392,6 @@ Note: Some may be blank or not work until containers/services are created in sub
 * Set up webhook
   * https://buildkite.com/continuous-everything/docker-webserver-example/settings/setup/github
   * Follow instructions
-* Add secrets
-  * https://github.com/buildkite/elastic-ci-stack-for-aws#build-secrets
-  * https://buildkite.com/docs/agent/hooks#creating-hook-scripts
-  * Generate `private_ssh_key` requires for buildkite secrets
-    * `ssh-keygen -t rsa -b 4096 -f id_rsa_buildkite`
-    * save keys in lastpass and copy to `~/.ssh`
-    * Add public key to github repo Settings -> Deploy Keys, named "buildkite"
-  * Create temp files for following hook scripts according to example in above links, upload to
-   `continuous-everything-buildkite-secrets` bucket using s3 CLI command in above links:
-    Should contain the following scripts/vars:
-    * `/private_ssh_key`
-      * Generated above, don't forget to add public key to github as deploy key
-      * `aws s3 cp --acl private --sse aws:kms ~/.ssh/id_rsa_buildkite "s3://continuous-everything-buildkite-secrets/private_ssh_key"`
-    * `/env`
-      ```
-      #!/bin/bash
-      
-      set -eu
-      
-      echo '--- :house_with_garden: Setting up the environment'
-      
-      export DOCKER_USER=continuouseverything
-      export DOCKER_PASS=<generated above>
-      export RANCHER_ACCESS_KEY=<from rancher, can be added later>
-      export RANCHER_SECRET_KEY=<from rancher, can be added later>
-      ```
-    * `aws s3 cp --acl private --sse aws:kms /tmp/env "s3://continuous-everything-buildkite-secrets/env"`
-    * NOTE: to get a local copy for updating, revert the `cp` params, update, then re-upload:
-      * `aws s3 cp --acl private --sse aws:kms "s3://continuous-everything-buildkite-secrets/private_ssh_key" ~/.ssh/id_rsa_buildkite`
-      * `aws s3 cp --acl private --sse aws:kms "s3://continuous-everything-buildkite-secrets/env" /tmp/env`
 
 ----
 
@@ -538,9 +540,9 @@ users:
 * Debugging hooks in docker buildkite agent
   * Set up hooks and ssh key:
     * Create user-owned `/tmp/buildkite` dir on local dev box
-    * Create `/tmp/buildkite/hooks` dir
-    * Create any hooks into hooks dir, e.g. `environment` and `pre-checkout`
-    * Copy `id_rsa_buildkite` to `/buildkite/id_rsa`
+    * `mkdir -p /tmp/buildkite/hooks`
+    * Create any hooks into hooks dir, e.g. `environment`
+    * Copy github deploy key `id_rsa_buildkite` to `/buildkite/hooks/id_rsa`
   * Start docker image locally:
     * `docker rm buildkite-agent` (if there is an old one with same name stopped)
     * `docker run --name buildkite-agent -it -v /var/run/docker.sock:/var/run/docker.sock -v /tmp/buildkite:/buildkite -e BUILDKITE_AGENT_TOKEN=$BUILDKITE_AGENT_TOKEN buildkite/agent:beta`
