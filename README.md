@@ -7,7 +7,40 @@ My attempt to automate as much of my hacking activity as possible - tests, deplo
 For anything I need to do more than once, once I commit and push, everything else should happen automatically. 
 
 I will attempt to list everything I had to do manually here, even if it's not in complete detail.
- 
+
+Obviously not all of this will remain working and in use, much of it is experimental to see what works and doesn't,
+what's easy and what's hard, what's complex and what's simple, what's stable and what's not.
+
+I'll try to eventually move unused/obsolete stuff out of the main doc, but for now I'll just try to keep
+the "Current Status" section up to date.
+
+## Current Status 2017-06-11
+
+* Buildkite
+  * It and the AWS Elastic Stack remain working and stable!  They've made improvements in the stack,
+    though, needs upgrade.
+* Rancher
+  * After initially getting it working with some hosts running via Spotinst and on a home linux PC,
+    I didn't touch anything for a couple of months.
+  * When I came back, the Rancher server had no hosts set up.  Restarting the Rancher server didn't help.
+  * Updating the Spotinst cloudconfig with a new Rancher host key didn't help, it never saw the hosts.
+  * Rebooting the home machine didn't help.  
+  * Bottom line, never got any hosts to come back up in rancher server.  Didn't have time to mess with it,
+    so I just shut down the Rancher server and scaled Spotinst to zero to save the money (it was ~20 a month).
+  * Going to give up on Rancher for now, it's promising and probably an easy fix if I took the time to look into
+    it, but for now it'w just a distraction from the main goal of deploying code in a continuous and stable way.
+* New plan is to just leverage PaaS, until I have something in production that requires more scale and expense:
+  * I got Elixir/Phoenix running on Pivotal Web Services PaaS, that's good enough to start: 
+    https://github.com/thewoolleyman/cf_phoenix
+* When I am ready for a server again and if PaaS proves too expensive, I may try Rancher again.
+  Or just Keep It Simple and set up dedicated server with an Elixir/Phoenix cluster.  Or get complicated
+  again, and try Kubernetes or CloudFoundry on bosh-lite ;)
+  * https://www.nocix.net/dedicated/ seems to have great prices on dedicated servers.
+* Docker compose / Docker image builds
+  * Buildkite now has a [docker compose plugin](https://github.com/buildkite-plugins/docker-compose-buildkite-plugin),
+    which also has a standard for versioning.  This has the potential to eliminate much of the custom logic
+    I wrote in https://github.com/thewoolleyman/docker-webserver-example, which also now has a non-working
+    dependency on my rancher stack for upgrade.
 
 ## Buildkite
 
