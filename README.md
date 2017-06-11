@@ -97,7 +97,7 @@ The starting point for automation of test/build/delivery pipelines.
       export RANCHER_SECRET_KEY='<from rancher, can be added later>'
       ```
     * `aws s3 cp --acl private --sse aws:kms /tmp/env "s3://continuous-everything-buildkite-secrets/env"`
-    * NOTE: to get a local copy for updating, revert the `cp` params, update, then re-upload:
+    * NOTE: to get a local copy for updating, reverse the `cp` params, update, then upload the modified version:
       * `aws s3 cp --acl private --sse aws:kms "s3://continuous-everything-buildkite-secrets/private_ssh_key" ~/.ssh/id_rsa_buildkite`
       * `aws s3 cp --acl private --sse aws:kms "s3://continuous-everything-buildkite-secrets/env" /tmp/env`
 
