@@ -1,5 +1,9 @@
 # continuous-everything
 
+***UPDATE: I abandoned this project.  The world moves on, and K8s and continued evolution of cloud provider
+functionality has obsoleted much of this.  It was a good learning experience though.  See
+[this](https://github.com/thewoolleyman/infrastructure-as-code-example-aws) for something more recent***
+
 ## Overview
 
 My attempt to automate as much of my hacking activity as possible - tests, deployment, etc.
